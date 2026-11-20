@@ -195,7 +195,6 @@ export class MatchEngine {
     // Input lokal
     this.input.update(dt);
     const localTrigger = this.input.consumeTriggers();
-    const mySide = this.mode === 'ONLINE' && !this.isHost ? 'AWAY' : 'HOME';
 
     // Update Power Gauge UI
     this.ui.updateGauge?.(localTrigger.shootHeld, localTrigger.shootCharge, localTrigger.curveBias);
@@ -251,9 +250,10 @@ export class MatchEngine {
     const active = this.players.find((p) => p.id === this.activePlayerIds[side]);
     if (!active) return;
 
+    // Kecepatan gerak pemain dikalibrasi agar tidak terlalu ngebut di arena 1000x560
     const spdStat = active.stats.speed || 80;
-    const sprintMult = trig.sprint ? 1.32 : 1.0;
-    const moveSpd = (155 + spdStat * 1.25) * sprintMult;
+    const sprintMult = trig.sprint ? 1.22 : 1.0;
+    const moveSpd = (86 + spdStat * 0.68) * sprintMult;
 
     active.vx = trig.moveX * moveSpd;
     active.vy = trig.moveY * moveSpd;
@@ -345,7 +345,6 @@ export class MatchEngine {
       ? FIELD.WIDTH - FIELD.MARGIN_X
       : FIELD.MARGIN_X;
 
-    // Sedikit arahkan ke dalam mulut gawang berdasarkan input arah vertikal pemain
     const aimY = clamp(FIELD.HEIGHT / 2 + shooter.facingY * 46, FIELD.HEIGHT / 2 - 48, FIELD.HEIGHT / 2 + 48);
     const dir = normalize(targetGoalX - this.ball.x, aimY - this.ball.y);
 
@@ -375,7 +374,6 @@ export class MatchEngine {
       return;
     }
 
-    // Set Piece Futsal: OUT (Kick-In), CORNER, GOAL_KICK, HANDBALL (Free Kick)
     const labelMap = {
       OUT: 'OUT — KICK IN FUTSAL',
       CORNER: 'TENDANGAN POJOK (CORNER)',
@@ -413,7 +411,6 @@ export class MatchEngine {
       if (this.score.HOME !== this.score.AWAY) {
         this._finishMatch('Full Time (2 Babak)');
       } else {
-        // Seri -> Babak Tambahan 2 Menit
         this.phase = 'EXTRA_TIME';
         this.phaseTimeLeft = 120;
         this._resetKickoff('HOME');
@@ -426,7 +423,6 @@ export class MatchEngine {
       if (this.score.HOME !== this.score.AWAY) {
         this._finishMatch('Selesai Setelah Extra Time');
       } else {
-        // Masih Seri -> Adu Penalti 3 Penendang
         this.phase = 'PENALTY';
         this.penaltyState = { round: 1, maxRounds: 3, homeResults: [], awayResults: [], turn: 'HOME' };
         this.ui.openPenaltyShootout?.(this.penaltyState);
@@ -434,9 +430,6 @@ export class MatchEngine {
     }
   }
 
-  /**
-   * Resolusi satu tembakan Adu Penalti (3 penendang per tim).
-   */
   submitPenaltyShot(zone) {
     if (this.phase !== 'PENALTY') return;
     const zones = ['TOP_LEFT', 'TOP_CENTER', 'TOP_RIGHT', 'BOT_LEFT', 'BOT_CENTER', 'BOT_RIGHT'];
@@ -445,7 +438,6 @@ export class MatchEngine {
 
     this.penaltyState.homeResults.push(isGoal);
 
-    // Giliran AI / Lawan menendang pada ronde yang sama
     const aiShot = zones[Math.floor(Math.random() * zones.length)];
     const aiGoal = Math.random() < 0.72 && aiShot !== zone;
     this.penaltyState.awayResults.push(aiGoal);
@@ -460,7 +452,6 @@ export class MatchEngine {
         this.score.AWAY += aGoals;
         this._finishMatch(`Menang Adu Penalti (${hGoals} - ${aGoals})`);
       } else {
-        // Masih imbang -> Lanjut ke Golden Ball Suit!
         this.phase = 'SUIT';
         this.suitState = { homeChoice: null, awayChoice: null, winner: null, shooterTeam: null };
         this.ui.openGoldenBallSuit?.();
@@ -471,9 +462,6 @@ export class MatchEngine {
     }
   }
 
-  /**
-   * Resolusi Suit Golden Ball (Batu, Gunting, Kertas).
-   */
   submitSuitChoice(userChoice) {
     if (this.phase !== 'SUIT') return;
     const opts = ['BATU', 'GUNTING', 'KERTAS'];
@@ -493,7 +481,6 @@ export class MatchEngine {
     if (userWins) {
       this.ui.promptSuitWinnerRole?.(userChoice, oppChoice);
     } else {
-      // AI menang suit, otomatis memilih menendang Golden Ball
       this.resolveGoldenBallShot('AWAY');
     }
   }
