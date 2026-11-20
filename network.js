@@ -6,7 +6,7 @@ const PEER_CONFIG = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
+      { urls: 'stun:stun2.l.google.com:19302' }
     ]
   }
 };
@@ -19,6 +19,7 @@ export class NetworkManager {
     this.roomCode = '';
     this.status = 'IDLE'; // IDLE | CONNECTING | CONNECTED | FAILED
     this._connectTimeout = null;
+    this._connectedFired = false;
     this.callbacks = callbacks;
   }
 
@@ -40,7 +41,7 @@ export class NetworkManager {
   _armConnectTimeout(msg) {
     this._clearTimeout();
     this._connectTimeout = setTimeout(() => {
-      if (this.status === 'CONNECTING') {
+      if (this.status === 'CONNECTING' && !this._connectedFired) {
         this._setStatus('FAILED', msg);
       }
     }, 12000);
@@ -49,21 +50,23 @@ export class NetworkManager {
   createRoom() {
     this.cleanup();
     this.isHost = true;
+    this._connectedFired = false;
     this.roomCode = generateRoomCode();
     const peerId = `efutsal5v5-${this.roomCode}`;
-    this._setStatus('CONNECTING', 'Menghubungkan ke server signaling room...');
-    this._armConnectTimeout('Waktu habis saat membuat room. Coba klik Coba Lagi.');
+
+    this._setStatus('CONNECTING', 'Menyiapkan room...');
+    this._armConnectTimeout('Gagal membuat room (timeout). Klik Coba Lagi.');
 
     try {
       if (typeof window.Peer === 'undefined') {
-        throw new Error('Library PeerJS belum siap. Periksa koneksi internet.');
+        throw new Error('PeerJS belum termuat. Periksa koneksi internet.');
       }
 
       this.peer = new window.Peer(peerId, PEER_CONFIG);
 
       this.peer.on('open', () => {
         this._clearTimeout();
-        this._setStatus('CONNECTING', `Room ${this.roomCode} aktif. Menunggu lawan bergabung...`);
+        this._setStatus('CONNECTING', `Room ${this.roomCode} siap! Berikan kode ini ke lawan.`);
         this.callbacks.onRoomCreated?.(this.roomCode);
       });
 
@@ -73,45 +76,44 @@ export class NetworkManager {
           return;
         }
         this.conn = connection;
-        this._setupConnectionHandlers();
+        this._bindDataChannel();
       });
 
       this.peer.on('disconnected', () => {
-        if (this.status !== 'CONNECTED') {
-          this._setStatus('FAILED', 'Terputus dari server signaling. Coba lagi.');
+        if (!this._connectedFired) {
+          this._setStatus('FAILED', 'Koneksi ke server signaling terputus.');
         }
       });
 
       this.peer.on('error', (err) => {
         const type = err?.type || 'error';
-        const reason =
-          type === 'unavailable-id'
-            ? 'Kode room sedang dipakai, silakan buat room ulang.'
-            : `Gangguan koneksi P2P (${type}).`;
-        this._setStatus('FAILED', reason);
+        if (this._connectedFired) return;
+        this._setStatus('FAILED', `Gangguan P2P (${type}). Coba buat room ulang.`);
       });
     } catch (err) {
-      this._setStatus('FAILED', err.message || 'Gagal menginisialisasi koneksi.');
+      this._setStatus('FAILED', err.message || 'Gagal memulai room.');
     }
   }
 
   joinRoom(codeInput) {
     const cleanCode = String(codeInput || '').trim().toUpperCase();
     if (cleanCode.length < 4) {
-      this._setStatus('FAILED', 'Masukkan kode room yang valid (minimal 4 karakter).');
+      this._setStatus('FAILED', 'Masukkan kode room yang valid.');
       return;
     }
 
     this.cleanup();
     this.isHost = false;
+    this._connectedFired = false;
     this.roomCode = cleanCode;
     const targetPeerId = `efutsal5v5-${cleanCode}`;
-    this._setStatus('CONNECTING', `Mencari room ${cleanCode}...`);
-    this._armConnectTimeout(`Gagal terhubung ke room ${cleanCode} (timeout). Pastikan kode benar & room aktif.`);
+
+    this._setStatus('CONNECTING', `Menghubungkan ke room ${cleanCode}...`);
+    this._armConnectTimeout(`Gagal terhubung ke room ${cleanCode}. Pastikan kode benar & Host sedang menunggu.`);
 
     try {
       if (typeof window.Peer === 'undefined') {
-        throw new Error('Library PeerJS belum siap.');
+        throw new Error('PeerJS belum termuat.');
       }
 
       this.peer = new window.Peer(undefined, PEER_CONFIG);
@@ -123,32 +125,45 @@ export class NetworkManager {
           serialization: 'json'
         });
         this.conn = connection;
-        this._setupConnectionHandlers();
+        this._bindDataChannel();
       });
 
       this.peer.on('error', (err) => {
         const type = err?.type || 'error';
-        const reason =
+        if (this._connectedFired) return;
+        const msg =
           type === 'peer-unavailable'
-            ? `Room ${cleanCode} tidak ditemukan atau belum siap.`
+            ? `Room ${cleanCode} tidak ditemukan atau sudah ditutup.`
             : `Gangguan koneksi P2P (${type}).`;
-        this._setStatus('FAILED', reason);
+        this._setStatus('FAILED', msg);
       });
     } catch (err) {
       this._setStatus('FAILED', err.message || 'Gagal bergabung ke room.');
     }
   }
 
-  _setupConnectionHandlers() {
+  _bindDataChannel() {
     if (!this.conn) return;
 
-    this.conn.on('open', () => {
+    const handleReady = () => {
+      if (this._connectedFired) return;
+      this._connectedFired = true;
       this._clearTimeout();
-      this._setStatus('CONNECTED', `Terhubung di Room ${this.roomCode}!`);
+      this._setStatus('CONNECTED', `Terhubung ke Room ${this.roomCode}! Membuka kustomisasi...`);
       this.callbacks.onConnected?.(this.isHost);
-    });
+    };
 
+    if (this.conn.open) {
+      handleReady();
+    }
+
+    this.conn.on('open', handleReady);
+
+    // Fallback jika pesan pertama datang sebelum event open terdeteksi
     this.conn.on('data', (payload) => {
+      if (!this._connectedFired) {
+        handleReady();
+      }
       if (payload && typeof payload === 'object') {
         this.callbacks.onData?.(payload);
       }
@@ -156,13 +171,18 @@ export class NetworkManager {
 
     this.conn.on('close', () => {
       this._clearTimeout();
-      this._setStatus('FAILED', 'Koneksi dengan lawan terputus.');
-      this.callbacks.onDisconnected?.();
+      if (this._connectedFired) {
+        this._connectedFired = false;
+        this._setStatus('FAILED', 'Koneksi dengan lawan terputus.');
+        this.callbacks.onDisconnected?.();
+      } else {
+        this._setStatus('FAILED', 'Jalur koneksi ditutup sebelum terhubung.');
+      }
     });
 
     this.conn.on('error', () => {
       this._clearTimeout();
-      this._setStatus('FAILED', 'Terjadi gangguan jalur data P2P.');
+      this._setStatus('FAILED', 'Terjadi gangguan koneksi P2P.');
     });
   }
 
@@ -172,12 +192,13 @@ export class NetworkManager {
         this.conn.send({ type, data, ts: Date.now() });
       }
     } catch {
-      // Mencegah throw saat koneksi baru terputus
+      // Aman saat koneksi ditutup
     }
   }
 
   cleanup() {
     this._clearTimeout();
+    this._connectedFired = false;
     try {
       if (this.conn) this.conn.close();
       if (this.peer) this.peer.destroy();
