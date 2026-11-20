@@ -74,14 +74,26 @@ export class TacticalAI {
       ? homeGoalX + attackDir * 14
       : homeGoalX;
 
-    this._steerToTarget(gk, desiredX, desiredY, diffMult * 1.05);
-
-    // Jika kiper memegang bola, segera distribusikan ke rekan kosong
-    if (ball.ownerId === gk.id && gk.aiCooldown <= 0) {
-      gk.aiCooldown = 0.5;
-      gk._wantsPass = true;
+    this.  _steerToTarget(p, tx, ty, speedFactor = 1) {
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 12) {
+      p.vx *= 0.55;
+      p.vy *= 0.55;
+      return;
     }
+    const n = normalize(dx, dy);
+    // Kecepatan lebih realistis & terkontrol di lapangan 1000x560
+    const baseSpeed = 78 + (p.stats.speed || 80) * 0.62;
+    const approachScale = d < 45 ? d / 45 : 1;
+    const maxSpd = baseSpeed * speedFactor * approachScale;
+    p.vx = n.x * maxSpd;
+    p.vy = n.y * maxSpd;
+    p.facingX = n.x;
+    p.facingY = n.y;
   }
+
 
   _updateBallCarrierAI(carrier, mates, allPlayers, ball, attackDir, diffMult) {
     const enemyGoalX = attackDir === 1 ? this.maxX : this.minX;
