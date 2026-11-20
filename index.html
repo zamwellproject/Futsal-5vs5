@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>eFutsal 5v5 Pro — Tactical Arena</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- PeerJS untuk Online Multiplayer P2P tanpa server backend -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+</head>
+<body>
+  <div id="app">
+    <!-- ==================== 1. MAIN MENU ==================== -->
+    <section id="screen-menu" class="screen active">
+      <div class="bg-grid"></div>
+      <header class="top-bar">
+        <div class="brand">
+          <span class="badge-pro">eFUTSAL</span>
+          <h1>5v5 TACTICAL ARENA</h1>
+        </div>
+        <button id="btn-open-admin" class="btn-ghost" title="Admin Panel">⚙️ Admin</button>
+      </header>
+
+      <main class="menu-container">
+        <div class="hero-card glass">
+          <h2>Pilih Mode Pertandingan</h2>
+          <p class="subtitle">Simulasi Futsal 5v5 • Curve Shot • Rotasi Taktis • Online P2P</p>
+
+          <div class="mode-grid">
+            <button id="btn-mode-ai" class="mode-card primary-glow">
+              <div class="mode-icon">🤖</div>
+              <div class="mode-info">
+                <h3>VS AI BOT</h3>
+                <span>Main cepat melawan kecerdasan buatan taktis</span>
+              </div>
+            </button>
+
+            <button id="btn-mode-online" class="mode-card accent-glow">
+              <div class="mode-icon">🌐</div>
+              <div class="mode-info">
+                <h3>ONLINE MULTIPLAYER</h3>
+                <span>Buat Room atau gabung dengan Kode Room (Timer 60s)</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="settings-row">
+            <div class="control-group">
+              <label for="select-duration">Durasi Match (2 Babak)</label>
+              <select id="select-duration">
+                <option value="3">3 Menit (1.5m / babak)</option>
+                <option value="4">4 Menit (2m / babak)</option>
+                <option value="5" selected>5 Menit (2.5m / babak)</option>
+                <option value="6">6 Menit (3m / babak)</option>
+                <option value="7">7 Menit (3.5m / babak)</option>
+              </select>
+            </div>
+
+            <div class="control-group" id="ai-diff-group">
+              <label for="select-difficulty">Level AI</label>
+              <select id="select-difficulty">
+                <option value="amateur">Amateur</option>
+                <option value="pro" selected>Professional</option>
+                <option value="legend">Legend</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ==================== 2. ONLINE LOBBY ==================== -->
+    <section id="screen-lobby" class="screen">
+      <div class="glass lobby-box">
+        <div class="lobby-header">
+          <h2>🌐 Online Multiplayer Room</h2>
+          <button id="btn-lobby-back" class="btn-ghost">← Kembali</button>
+        </div>
+
+        <div id="net-status-banner" class="status-pill idle">Status: Siap membuat/gabung room</div>
+
+        <div class="lobby-actions">
+          <div class="lobby-card">
+            <h3>Buat Room Baru (Host)</h3>
+            <p>Buat kode unik dan bagikan ke lawanmu.</p>
+            <button id="btn-create-room" class="btn-primary full">Buat Room</button>
+            <div id="room-code-display" class="room-code-box hidden">
+              <span>Kode Room:</span>
+              <strong id="host-room-code">------</strong>
+              <button id="btn-copy-code" class="btn-small">Salin</button>
+            </div>
+          </div>
+
+          <div class="divider-or">ATAU</div>
+
+          <div class="lobby-card">
+            <h3>Gabung Room (Guest)</h3>
+            <p>Masukkan 6 karakter kode room dari temanmu.</p>
+            <div class="join-row">
+              <input type="text" id="input-room-code" maxlength="12" placeholder="Contoh: EVR829" autocomplete="off" />
+              <button id="btn-join-room" class="btn-accent">Gabung</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="lobby-error-box" class="error-banner hidden">
+          <span id="lobby-error-msg">Koneksi gagal.</span>
+          <button id="btn-retry-net" class="btn-small">Coba Lagi</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 3. SQUAD & JERSEY SETUP ==================== -->
+    <section id="screen-squad" class="screen">
+      <header class="squad-header glass">
+        <div>
+          <h2 id="squad-title">Manajemen Skuad 5v5</h2>
+          <span id="squad-subtitle" class="muted">Pilih 1 Kiper + 4 Pemain Outfield & Atur Nomor Punggung</span>
+        </div>
+
+        <div id="online-timer-box" class="timer-badge hidden">
+          <span>⏳ Sisa Waktu Setup:</span>
+          <strong id="online-setup-timer">60s</strong>
+        </div>
+
+        <div class="squad-header-actions">
+          <button id="btn-squad-back" class="btn-ghost">Batal</button>
+          <button id="btn-confirm-squad" class="btn-primary">Siap Bertanding ✔</button>
+        </div>
+      </header>
+
+      <div class="squad-layout">
+        <!-- Kolom Kiri: Identitas Tim & Warna Jersey -->
+        <div class="panel glass">
+          <h3>1. Identitas & Jersey Tim</h3>
+          <div class="control-group">
+            <label for="select-team">Tim Resmi</label>
+            <select id="select-team"></select>
+          </div>
+
+          <div class="color-pickers">
+            <div class="color-item">
+              <label for="color-primary">Warna Utama</label>
+              <input type="color" id="color-primary" value="#00e5ff" />
+            </div>
+            <div class="color-item">
+              <label for="color-accent">Warna Aksen</label>
+              <input type="color" id="color-accent" value="#0f172a" />
+            </div>
+          </div>
+
+          <!-- Preview Jersey -->
+          <div class="jersey-preview-wrap">
+            <div id="jersey-preview" class="jersey-card">
+              <div class="jersey-stripe" id="jersey-stripe-el"></div>
+              <span id="jersey-team-code">EVR</span>
+              <small>PREVIEW KIT</small>
+            </div>
+          </div>
+
+          <div id="ai-opponent-box" class="control-group">
+            <label for="select-ai-team">Tim Lawan (AI)</label>
+            <select id="select-ai-team"></select>
+          </div>
+        </div>
+
+        <!-- Kolom Tengah: Lineup Aktif (5 Pemain + Custom Nomor Punggung) -->
+        <div class="panel glass">
+          <h3>2. Starting Lineup (5 Pemain)</h3>
+          <p class="hint">Ubah nomor punggung langsung di kotak angka. Duplikasi otomatis dicegah.</p>
+          <div id="active-lineup-list" class="lineup-slots"></div>
+        </div>
+
+        <!-- Kolom Kanan: Daftar Pemain Tersedia -->
+        <div class="panel glass">
+          <h3>3. Pool Pemain Tersedia</h3>
+          <div class="tab-filter">
+            <button class="tab-btn active" data-filter="ALL">Semua</button>
+            <button class="tab-btn" data-filter="GK">Kiper (GK)</button>
+            <button class="tab-btn" data-filter="OUTFIELD">Outfield</button>
+          </div>
+          <div id="player-pool-list" class="pool-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4. MATCH ARENA (CANVAS + HUD) ==================== -->
+    <section id="screen-match" class="screen">
+      <!-- Top Scoreboard HUD -->
+      <div class="match-hud-top">
+        <div class="scoreboard glass-hud">
+          <div class="team-badge" id="hud-home-box">
+            <span class="kit-dot" id="hud-home-dot"></span>
+            <strong id="hud-home-name">EVR</strong>
+            <span class="score-num" id="hud-home-score">0</span>
+          </div>
+
+          <div class="match-clock-box">
+            <span id="hud-period" class="period-tag">1ST HALF</span>
+            <strong id="hud-clock">02:30</strong>
+          </div>
+
+          <div class="team-badge" id="hud-away-box">
+            <span class="score-num" id="hud-away-score">0</span>
+            <strong id="hud-away-name">VDL</strong>
+            <span class="kit-dot" id="hud-away-dot"></span>
+          </div>
+        </div>
+
+        <div class="hud-right-tools">
+          <span id="hud-net-indicator" class="net-pill hidden">🟢 P2P</span>
+          <button id="btn-pause-match" class="btn-hud-icon" title="Menu Match">⏸</button>
+        </div>
+      </div>
+
+      <!-- Banner Event Futsal (GOAL, OUT, CORNER, HANDBALL, HALFTIME) -->
+      <div id="match-banner" class="match-banner hidden">
+        <h2 id="match-banner-title">GOAL!</h2>
+        <p id="match-banner-sub">Tendangan melengkung memukau!</p>
+      </div>
+
+      <!-- Canvas Lapangan -->
+      <div id="canvas-wrapper">
+        <canvas id="game-canvas"></canvas>
+      </div>
+
+      <!-- Power & Curve Gauge Indicator -->
+      <div id="shot-gauge-container" class="shot-gauge-wrap hidden">
+        <div class="gauge-labels">
+          <span>POWER</span>
+          <span id="curve-dir-label">CURVE: LURUS</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="shot-power-fill" class="gauge-fill"></div>
+        </div>
+      </div>
+
+      <!-- Desktop Controls Helper -->
+      <div class="desktop-controls-hint">
+        <span><b>WASD/Panah</b>: Gerak</span>
+        <span><b>K / Space</b>: Tendang (Tahan + Arah = Curve)</span>
+        <span><b>J</b>: Oper</span>
+        <span><b>L</b>: Terobosan</span>
+        <span><b>E</b>: Sprint</span>
+        <span><b>Q</b>: Ganti Pemain</span>
+      </div>
+
+      <!-- Mobile / Tablet Virtual Touch Controls -->
+      <div id="touch-controls" class="touch-layer">
+        <!-- Virtual Joystick Kiri -->
+        <div id="joystick-zone" class="joystick-zone">
+          <div id="joystick-base" class="joystick-base">
+            <div id="joystick-stick" class="joystick-stick"></div>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi Kanan -->
+        <div class="action-buttons-zone">
+          <button id="btn-touch-curve" class="t-btn t-curve" data-action="curve">CURVE<br><small>OFF</small></button>
+          <button id="btn-touch-sprint" class="t-btn t-sprint" data-action="sprint">SPRINT</button>
+          <button id="btn-touch-switch" class="t-btn t-switch" data-action="switch">SWITCH</button>
+          <button id="btn-touch-through" class="t-btn t-through" data-action="through">THROUGH</button>
+          <button id="btn-touch-pass" class="t-btn t-pass" data-action="pass">PASS</button>
+          <button id="btn-touch-shoot" class="t-btn t-shoot" data-action="shoot">SHOOT</button>
+        </div>
+      </div>
+
+      <!-- Overlay Adu Penalti (3 Penendang) -->
+      <div id="penalty-overlay" class="modal-overlay hidden">
+        <div class="modal-card glass">
+          <h2>⚽ ADU PENALTI (3 PENENDANG)</h2>
+          <p id="penalty-status-text">Giliran Anda Menendang! Pilih sudut tembakan & curve.</p>
+          <div id="penalty-scoreboard" class="pen-dots-row"></div>
+
+          <div id="penalty-controls" class="pen-grid">
+            <button class="pen-target" data-zone="TOP_LEFT">↖ Kiri Atas</button>
+            <button class="pen-target" data-zone="TOP_CENTER">⬆ Tengah Atas</button>
+            <button class="pen-target" data-zone="TOP_RIGHT">↗ Kanan Atas</button>
+            <button class="pen-target" data-zone="BOT_LEFT">↙ Kiri Bawah</button>
+            <button class="pen-target" data-zone="BOT_CENTER">⬇ Tengah Bawah</button>
+            <button class="pen-target" data-zone="BOT_RIGHT">↘ Kanan Bawah</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overlay Golden Ball Suit (Batu Gunting Kertas) -->
+      <div id="suit-overlay" class="modal-overlay hidden">
+        <div class="modal-card glass">
+          <span class="badge-gold">GOLDEN BALL TIE-BREAKER</span>
+          <h2>✌️ SUIT PENENTUAN</h2>
+          <p id="suit-instruction">Skor masih imbang! Pilih Gunting, Batu, atau Kertas untuk menentukan hak Tendang/Tepis.</p>
+
+          <div id="suit-choices" class="suit-row">
+            <button class="suit-btn" data-suit="BATU">✊<span>Batu</span></button>
+            <button class="suit-btn" data-suit="GUNTING">✌️<span>Gunting</span></button>
+            <button class="suit-btn" data-suit="KERTAS">🖐️<span>Kertas</span></button>
+          </div>
+
+          <div id="suit-role-choice" class="suit-role-box hidden">
+            <h3 id="suit-result-msg">Kamu Menang Suit!</h3>
+            <p>Pilih peran penentu kemenangan Golden Ball:</p>
+            <div class="role-btn-row">
+              <button id="btn-choose-kick" class="btn-primary">⚡ JADI PENENDANG</button>
+              <button id="btn-choose-save" class="btn-accent">🧤 JADI KIPER (TEBIS)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overlay Pause / Full Time -->
+      <div id="endmatch-overlay" class="modal-overlay hidden">
+        <div class="modal-card glass">
+          <h2 id="endmatch-title">PERTANDINGAN SELESAI</h2>
+          <div class="final-score-box">
+            <span id="final-home-name">EVR</span>
+            <strong id="final-score-text">2 - 1</strong>
+            <span id="final-away-name">VDL</span>
+          </div>
+          <p id="endmatch-reason" class="muted">Full Time</p>
+          <div class="modal-actions">
+            <button id="btn-resume-match" class="btn-ghost hidden">Lanjutkan</button>
+            <button id="btn-back-to-menu" class="btn-primary">Kembali ke Menu Utama</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 5. ADMIN MODAL (PASSWORD: azzamkece26) ==================== -->
+    <div id="admin-modal" class="modal-overlay hidden">
+      <div class="modal-card glass admin-box">
+        <div class="lobby-header">
+          <h2>🔐 Admin Stat Editor</h2>
+          <button id="btn-close-admin" class="btn-ghost">✕</button>
+        </div>
+
+        <div id="admin-login-view">
+          <p>Masukkan password administrator untuk menyesuaikan atribut pemain:</p>
+          <div class="join-row">
+            <input type="password" id="input-admin-pass" placeholder="Password admin..." />
+            <button id="btn-submit-admin" class="btn-primary">Buka</button>
+          </div>
+          <p id="admin-error" class="error-text hidden">Password salah!</p>
+        </div>
+
+        <div id="admin-editor-view" class="hidden">
+          <p class="hint">Ubah atribut pemain (1 - 99). Perubahan berlaku instan pada sesi ini.</p>
+          <div class="control-group">
+            <label for="admin-select-player">Pilih Pemain</label>
+            <select id="admin-select-player"></select>
+          </div>
+          <div id="admin-stats-form" class="stats-grid"></div>
+          <div class="modal-actions">
+            <button id="btn-reset-stats" class="btn-ghost">Reset Default</button>
+            <button id="btn-save-stats" class="btn-primary">Simpan Stat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
